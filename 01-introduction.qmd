@@ -1,0 +1,115 @@
+---
+title: "Introduction"
+---
+
+## Research Contributions and Document Roadmap
+
+```{r}
+#| label: setup-ch1
+#| include: false
+source("_common.R")
+```
+
+### Primary Contributions
+
+This study makes three substantive contributions to the intersection of endowment portfolio management, copula methodology, and applied portfolio optimization:
+
+**Contribution 1: Vine Copula Framework for Alternative-Heavy Portfolios**
+
+We develop and implement the first comprehensive regular vine copula analysis of endowment-style portfolios incorporating substantial alternative asset allocations. While prior studies apply vine copulas to liquid public market assets [@sahamkhadam2023portfolio; @evkaya2024vine], endowment portfolios present unique modeling challenges:
+
+- **Severe non-normality:** Alternative assets exhibit negative skewness (ranging from -0.5 to -1.2) and excess kurtosis (3 to 8) substantially exceeding public equity characteristics
+- **Asymmetric tail dependencies:** Private equity, venture capital, and hedge funds display stronger co-crash than co-rally tendencies, requiring copula families (Clayton, Gumbel) beyond symmetric Gaussian specifications
+- **Smoothed return patterns:** Lagged private asset valuations create artificial autocorrelation and understated volatility, complicating marginal distribution fitting and dependence parameter estimation
+
+Our C-vine specification with flexible bivariate copula families (Gaussian, Student-t, Clayton, Gumbel, Frank, Joe) captures these features, enabling realistic simulation of joint return distributions including extreme market scenarios.
+
+**Contribution 2: Comprehensive Model Validation Protocol**
+
+Portfolio decisions based on copula models require confidence in model adequacy. We implement an extensive validation framework establishing that our vine copula specification accurately reproduces:
+
+1. **Marginal distributions** through:
+   - Multiple goodness-of-fit tests (Kolmogorov-Smirnov, Anderson-Darling, Cramér-von Mises) applied to each asset class
+   - Quantile-quantile plots examining reproduction across the full return spectrum (1st to 99th percentile)
+   - Higher moment comparison (skewness, kurtosis) between empirical and simulated distributions
+
+2. **Dependence structures** through:
+   - Correlation preservation tests across three measures (Pearson, Kendall's tau, Spearman's rho) achieving mean absolute errors below 4%
+   - Tail dependence coefficient estimation comparing empirical co-crash probabilities with model-implied values
+   - Rank correlation scatter plots identifying any systematic dependence misspecification
+
+3. **Simulation quality** through:
+   - Convergence diagnostics showing stabilization of estimated moments as simulation paths increase
+   - Antithetic variate variance reduction validation demonstrating effective information doubling
+   - Quality scores (integrated correlation error) below 0.05 threshold indicating production-ready models
+
+This validation rigor—substantially exceeding typical applied copula work—provides confidence that downstream portfolio optimization reflects realistic risk-return tradeoffs rather than model artifacts.
+
+**Contribution 3: Integration with Endowment-Specific Optimization**
+
+We connect vine copula simulations with multiple portfolio optimization frameworks addressing endowment-specific objectives and constraints:
+
+**Optimization approaches:**
+- Minimum variance portfolios emphasizing capital preservation
+- Maximum Sharpe ratio (tangency) portfolios optimizing risk-adjusted returns
+- Constrained efficient frontiers under long-only and long-short specifications
+- Stress scenario analysis across seven market conditions (1st to 99th percentile)
+
+**Endowment considerations integrated:**
+- Comparison of optimal allocations with current endowment practice (using NACUBO survey data as benchmarks)
+- Discussion of illiquidity constraints from private capital commitments typically representing 30-50% of unfunded obligations
+- Analysis of spending policy implications requiring 20-30% liquid reserves for distributions and capital calls
+- Quantification of implementation frictions including fees (200-400 basis points for alternatives), transaction costs, and rebalancing limitations
+
+**Practical insights generated:**
+- Tail risk reduction from vine copulas versus Gaussian assumptions (15-30% underestimation of co-crash probabilities under normality)
+- Asset class contributions to portfolio downside risk beyond what correlation analysis reveals
+- Optimal allocation sensitivity to risk tolerance, crisis protection emphasis, and fee structures
+- Cost thresholds where alternative asset friction offsets theoretical diversification benefits
+
+### Methodological Innovations
+
+Beyond our substantive contributions, we advance copula methodology through several technical innovations:
+
+**Hybrid marginal distribution approach:** Rather than imposing parametric distributions (normal, Student-t, skewed-t) that may misfit tails, we use kernel density estimation for body distributions and empirical quantile matching for extreme tails (below 5th, above 95th percentile). This non-parametric approach maximizes flexibility while avoiding overfitting.
+
+**Conditional convergence diagnostics:** Standard Monte Carlo convergence tests examine unconditional moments. We extend this by testing convergence of conditional statistics—correlation given one asset is in crisis, tail dependence coefficients, and stress scenario returns—directly relevant to portfolio risk management.
+
+**Integrated stress testing:** Most copula studies report unconditional VaR/CVaR. We generate seven stress scenarios corresponding to different market conditions (1st, 5th, 10th, 50th, 90th, 95th, 99th percentiles) and calculate portfolio performance under each, revealing tradeoffs invisible in aggregate metrics.
+
+### Contributions to Practice
+
+For endowment portfolio managers and investment committees, our analysis provides actionable insights:
+
+**Asset allocation implications:**
+- Hedge funds warrant 30-50% allocations in minimum variance frameworks (versus typical 10-15% current practice), though capacity constraints, fees, and liquidity restrictions temper this recommendation
+- International equities provide limited incremental diversification given 0.75-0.89 correlations with domestic equities, questioning typical 15-20% allocations
+- Tail risk from alternative assets exceeds what standalone volatility suggests—venture capital and private equity negative skewness creates asymmetric downside exposure
+
+**Risk management priorities:**
+- Correlation breakdown during crises (50-100% increases) necessitates stress testing under crisis scenarios rather than relying on unconditional correlation estimates
+- Lower tail dependence coefficients of 0.35-0.45 for equity pairs indicate substantial co-crash risk requiring explicit capital preservation strategies
+- Liquidity management becomes paramount given potential for forced selling during crises when correlations spike and redemption restrictions bind
+
+**Governance considerations:**
+- No single portfolio dominates across all market conditions—optimal choice requires explicit articulation of institutional priorities
+- Short-sale constraints bind meaningfully, expanding efficient frontier 15-20% when relaxed
+- Cost monitoring is essential: 200-400 basis point fee differentials can reverse optimization conclusions
+
+### Document Organization
+
+The remainder of this document proceeds as follows:
+
+**Chapter 2: Literature Review and Theoretical Framework** situates our contributions within endowment management, copula methodology, and portfolio optimization literatures.
+
+**Chapter 3: Data and Descriptive Statistics** presents our eight asset classes, summary statistics, and preliminary analysis revealing severe non-normality motivating copula approaches.
+
+**Chapter 4: Mean-Variance Portfolio Optimization** applies traditional optimization techniques generating efficient frontiers under long-only and long-short constraints.
+
+**Chapter 5: Vine Copula Methodology and Validation** develops our C-vine specification, estimates bivariate copulas, generates simulated scenarios, and validates model adequacy.
+
+**Chapter 6: Conclusions and Implications** synthesizes findings, discusses limitations, and provides recommendations for practitioners.
+
+**Appendices** provide extended technical details on vine copula diagnostics, stress testing, and performance attribution.
+
+Throughout, we balance technical rigor with practical relevance, recognizing that endowment portfolio decisions reflect not just risk-return optimization but values, constraints, and governance philosophies that quantitative models inform but cannot prescribe [@dimmock2024endowment; @brown2014endowments].

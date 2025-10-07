@@ -1,0 +1,198 @@
+---
+title: "Literature Review and Theoretical Framework"
+---
+
+```{r}
+#| label: setup-ch2
+#| include: false
+source("_common.R")
+```
+
+This section situates our research within three interconnected literatures: endowment portfolio management, copula-based dependence modeling, and portfolio optimization under realistic constraints. We identify the specific gaps our study addresses and articulate our methodological contributions.
+
+## Endowment Portfolio Management
+
+### Historical Evolution and the Yale Model
+
+The modern approach to endowment investing—often termed the "endowment model" or "Yale model"—emerged in the 1990s under David Swensen's leadership at Yale University [@swensen2009pioneering]. This approach fundamentally reconceptualized institutional asset allocation through several key innovations:
+
+**Alternative Asset Emphasis:** Traditional 60/40 stock-bond portfolios gave way to diversified allocations including substantial positions (often 50-70% combined) in private equity, venture capital, hedge funds, real assets, and other alternatives. The rationale centered on exploiting illiquidity premiums, accessing less efficient markets where active management could add value, and achieving true diversification beyond correlated public market exposures [@lerner2008endowment].
+
+**Long-Term Orientation:** With perpetual investment horizons and no regulatory capital requirements, endowments could tolerate the illiquidity and mark-to-market volatility that shorter-term investors eschew. This temporal advantage theoretically enabled capturing risk premiums unavailable to constrained investors.
+
+**Active Management:** The endowment model explicitly rejected passive indexing for alternatives, arguing that manager selection skill in less efficient markets could generate persistent alpha. Access to top-tier fund managers became a critical determinant of performance.
+
+### Empirical Performance and Critique
+
+Recent empirical evidence presents a more nuanced picture of endowment performance:
+
+@brown2014endowments analyze how endowments responded to the 2008 financial crisis, finding that institutions with greater illiquid alternative allocations experienced more severe and persistent portfolio distortions. Despite long-term horizons, many endowments were forced into suboptimal rebalancing due to capital call obligations and spending requirements [@chambers2020endowment].
+
+@dimmock2024endowment provide comprehensive analysis of endowment allocations from 1997-2023, finding:
+
+- Substantial variation in optimal allocations across subperiods (pre-crisis, crisis, post-crisis)
+- Hedge funds warrant larger allocations than currently deployed in many portfolios
+- International equities rarely receive substantial allocations in optimized frameworks despite 18.5% average exposure
+- Market frictions, spending constraints, and illiquidity materially impact optimal policy
+
+Perhaps most provocatively, recent data suggests large endowments have underperformed simple 60/40 or 70/30 indexed portfolios by 200-250 basis points annually since the 2008 financial crisis, with alternative asset exposure explaining 92% of return variation. High fees (200-400 basis points on alternatives versus 10-20 for index funds) and return smoothing from lagged private asset valuations contribute significantly to this underperformance.
+
+### Spending Policies and Intergenerational Equity
+
+Unlike private foundations subject to mandatory 5% minimum distributions, university endowments face no regulatory payout requirements. Nonetheless, nearly all endowments implement spending rules—typically distributing 4-5% of a trailing moving average of portfolio values [@cejnek2023spending].
+
+These policies create complex optimization dynamics:
+
+- **Smoothing mechanisms** (multi-year moving averages) buffer spending from short-term volatility but create path-dependent outcomes
+- **Intergenerational equity concerns** balance current spending needs against preservation of future purchasing power
+- **Liquidity requirements** for distributions plus private capital calls necessitate maintaining 20-30% liquid reserves
+
+@ang2014liability demonstrate that liability-driven investment frameworks explicitly incorporating spending obligations yield materially different optimal allocations than unconstrained mean-variance optimization—a consideration our analysis acknowledges but does not fully model.
+
+## Copula Methodology in Finance
+
+### Foundations of Copula Theory
+
+Copulas provide a flexible framework for modeling multivariate distributions by separating marginal distributions from dependence structures. @sklar1959fonctions theorem establishes that any multivariate cumulative distribution function $F$ can be decomposed as:
+
+$$F(x_1, \ldots, x_d) = C(F_1(x_1), \ldots, F_d(x_d))$$
+
+where $C$ is a copula function—a multivariate distribution on $[0,1]^d$ with uniform marginals—and $F_i$ are the marginal distribution functions. This separation enables modelers to:
+
+1. **Fit marginal distributions independently** using appropriate parametric or non-parametric methods for each asset's return distribution
+2. **Model dependence flexibly** through copula families that capture features (tail dependence, asymmetry, non-linear association) beyond linear correlation
+3. **Simulate joint scenarios** preserving both marginal characteristics and dependence structures
+
+While bivariate copulas (Gaussian, Student-t, Clayton, Gumbel, Frank) are well-established [@joe1997multivariate], extending to high dimensions presents challenges that vine copula constructions address.
+
+### Regular Vine Copulas: Decomposing High-Dimensional Dependence
+
+@bedford2002vines introduced regular vine (R-vine) copulas as a graphical model representing high-dimensional distributions through cascading bivariate copulas. Rather than imposing a single multivariate copula structure, vines decompose the d-dimensional density into $d(d-1)/2$ bivariate copulas organized hierarchically.
+
+**Key vine structures include:**
+
+**Canonical vines (C-vines):** Feature a "star" structure where one variable plays a central role in each tree, useful when one asset (e.g., a market index) drives correlations with others.
+
+**Drawable vines (D-vines):** Organize variables in a path structure, appropriate when natural sequential ordering exists.
+
+**Regular vines (R-vines):** Allow arbitrary structures, encompassing both C- and D-vines as special cases, providing maximum flexibility [@czado2019analyzing].
+
+The mathematical foundation rests on decomposing the joint density through conditional distributions:
+
+$$f(x_1, \ldots, x_d) = \prod_{i=1}^{d} f_i(x_i) \cdot \prod_{j=1}^{d-1}\prod_{e \in E_j} c_{e|D(e)}$$
+
+where $c_{e|D(e)}$ represents pair-copula densities conditional on sets $D(e)$ determined by the vine structure, and $E_j$ denotes edges in tree $j$.
+
+@aas2009pair brought vine copulas into mainstream financial econometrics, demonstrating applications to equity return modeling. Their work established computational feasibility and statistical inference procedures for vine specifications.
+
+### Model Selection and Truncation
+
+A critical challenge with vine copulas in high dimensions is complexity: a d-dimensional model requires specifying $d(d-1)/2$ bivariate copulas, each potentially from different families (Gaussian, Student-t, Clayton, Gumbel, etc.). Two approaches address this:
+
+**Truncation:** @brechmann2012truncated show that vine copulas can be truncated after $k$ trees (where $k < d-1$), with remaining dependencies modeled as independent or with simplified copulas. They demonstrate through simulation and empirical application to 19-dimensional financial data that truncation after 3-4 trees often preserves model fit while dramatically reducing complexity.
+
+**Mixture copulas:** @scheffer2015mixture propose using convex combinations of copula families for each pair-copula, obviating the need to select a single parametric form. Their EM-algorithm approach enables data-driven weighting across candidate copulas, reducing model selection risk.
+
+### Vine Copulas in Portfolio Optimization: Recent Advances
+
+The application of vine copulas to portfolio problems has accelerated substantially since 2015:
+
+@sahamkhadam2023portfolio examine vine copulas for modeling symmetric and asymmetric dependencies across international equity indices from 2001-2022, encompassing multiple crisis periods. Their key findings:
+
+- **Mixed vine copulas** combining symmetric (Gaussian, Student-t) and asymmetric (Clayton, Gumbel) families provide superior out-of-sample risk reduction versus single-family specifications
+- **D-vine structures** outperform C-vines and R-vines for conditional value-at-risk (CVaR) minimization
+- Vine copula portfolios reduce risk better than benchmark strategies and simple multivariate copulas across both normal and crisis periods
+
+@bedoui2023hybrid integrate vine copulas with GARCH volatility models, extreme value theory (EVT) for tail modeling, and genetic algorithms for optimization. Their hybrid Vine-GARCH-EVT-CVaR framework demonstrates:
+
+- Combining EVT tail modeling with vine dependence structures improves risk assessment versus vine copulas alone
+- Genetic algorithms effectively solve the complex non-convex optimization problems arising from CVaR objectives with vine copula constraints
+- The integrated approach outperforms simpler benchmarks for multi-asset portfolio construction
+
+@mba2024assessing employ vine copulas with APARCH-DCC models to assess portfolio vulnerability to systemic risk through conditional value-at-risk (CoVaR). Their findings emphasize:
+
+- Auto-selection of copula families for each pair enables flexible dependence modeling
+- Cryptocurrency portfolios exhibit greater systemic risk (higher CoVaR) than traditional asset portfolios
+- APARCH modeling capturing volatility clustering, skewness, and leverage effects enhances risk assessment
+
+## Portfolio Optimization Beyond Mean-Variance
+
+### Limitations of Classical Mean-Variance Framework
+
+@markowitz1952portfolio pioneering mean-variance optimization revolutionized portfolio theory but rests on restrictive assumptions:
+
+1. **Returns are normally distributed** (or investors have quadratic utility), enabling complete risk characterization through mean and variance
+2. **Correlations are constant** over time and across market states
+3. **Parameter estimates are known** with certainty rather than subject to estimation error
+4. **Constraints** (liquidity, governance, taxes, position limits) are absent or non-binding
+
+Financial returns systematically violate these assumptions. @embrechts2002correlation catalog the "pitfalls" of correlation-based risk management:
+
+- **Tail dependence matters:** Assets may exhibit low correlation overall but high co-crash probability
+- **Asymmetry exists:** Downside correlations often exceed upside correlations [@ang2002asymmetric]
+- **Non-linear dependencies:** Correlation only captures linear association
+
+@longin2001extreme document that international equity correlations increase from 0.40-0.50 in normal periods to 0.70-0.80 during extreme downturns—precisely when diversification is most valuable. Mean-variance optimization using unconditional correlations therefore overestimates downside protection.
+
+### Robust Optimization and Parameter Uncertainty
+
+@kan2007optimal demonstrate that estimation error in expected returns can make optimized portfolios underperform naive 1/N equal-weighting. Small changes in return estimates generate large allocation changes, producing unstable, concentrated portfolios.
+
+Several approaches address parameter uncertainty:
+
+**Bayesian methods:** Incorporate prior beliefs and shrink estimates toward moments [@pastor2000comparing]
+
+**Robust optimization:** Optimize over worst-case scenarios within confidence regions rather than point estimates [@goldfarb2003robust]
+
+**Resampling:** Generate multiple efficient frontiers from bootstrap samples and average allocations [@michaud1998efficient]
+
+Our vine copula approach contributes to robustness by:
+- Using empirical marginal distributions rather than parametric assumptions
+- Modeling tail dependencies explicitly through copula families designed for extremes
+- Providing simulation-based validation of distributional assumptions
+
+### Beyond Mean-Variance: Alternative Risk Measures
+
+Modern portfolio theory increasingly employs risk measures beyond variance:
+
+**Value-at-Risk (VaR):** Quantile-based measure capturing the loss threshold exceeded with probability $\alpha$ (typically 1% or 5%). However, VaR lacks subadditivity and ignores tail shape beyond the threshold [@artzner1999coherent].
+
+**Conditional Value-at-Risk (CVaR):** Expected loss conditional on exceeding VaR, also known as Expected Shortfall. CVaR is coherent, convex, and amenable to optimization [@rockafellar2000optimization]. Our analysis calculates both VaR and CVaR across portfolios.
+
+**Conditional CoVaR:** System-wide risk contribution of an asset, measuring VaR of the portfolio conditional on an individual asset experiencing stress [@adrian2016covar].
+
+**Omega Ratio:** Ratio of probability-weighted gains to losses above/below a threshold, incorporating full return distribution rather than just moments [@keating2002universal].
+
+These measures explicitly account for tail risk, asymmetry, and higher moments that mean-variance optimization overlooks—features our vine copula framework naturally captures.
+
+## Research Gap and Contributions
+
+Despite substantial literature on endowment investing, copula methodology, and portfolio optimization, critical gaps remain:
+
+### Gaps in Existing Literature
+
+**Limited vine copula application to endowment portfolios:** While vine copulas have been applied to public equities, commodities, and cryptocurrencies, no study has systematically applied them to the distinctive asset mix characterizing endowment portfolios. These alternatives exhibit more severe non-normality, unique tail dependence patterns, and smoothed returns from lagged valuations.
+
+**Insufficient integration of endowment constraints:** Portfolio optimization studies using vine copulas typically focus on liquid assets allowing frequent rebalancing. Endowments face illiquid commitments, spending policy requirements, and governance constraints limiting leverage and concentration.
+
+**Limited validation of copula model adequacy:** Many applied copula studies report model fit statistics but lack comprehensive validation regarding tail dependence preservation, out-of-sample performance, and sensitivity to vine structure selection.
+
+### Contributions of This Study
+
+Our research addresses these gaps through three primary contributions:
+
+**1. First comprehensive vine copula analysis of endowment-style portfolios** incorporating eight asset classes over 2003-2020 encompassing the 2008 financial crisis. We explicitly model the tail dependencies, asymmetric correlations, and higher moments characterizing alternative asset returns.
+
+**2. Extensive model validation framework** including marginal distribution goodness-of-fit, tail dependence coefficient comparison, correlation preservation across multiple measures, stress scenario validation, and Monte Carlo convergence diagnostics.
+
+**3. Integration with endowment-specific considerations** including multiple optimization frameworks, long-only and long-short specifications, stress scenario analysis, and discussion of implementation frictions.
+
+### Positioning Within the Literature
+
+This study bridges three literatures—endowment management, vine copula methodology, and portfolio optimization—contributing to each:
+
+**To endowment literature:** We provide the first rigorous tail dependence analysis of alternative-heavy portfolios, quantifying co-crash risks that correlation matrices underestimate.
+
+**To copula literature:** We extend vine copula applications to a challenging asset class mix characterized by severe non-normality, and provide unusually comprehensive model validation.
+
+**To optimization literature:** We demonstrate how vine copula simulations enable portfolio optimization under non-normal returns, asymmetric dependencies, and tail risk—features that mean-variance frameworks struggle to accommodate.

@@ -1,0 +1,179 @@
+---
+title: "Appendix B: Performance Attribution"
+---
+
+```{r}
+#| label: setup-appb
+#| include: false
+source("_common.R")
+```
+
+## Sharpe Ratio Decomposition
+
+```{r}
+#| label: sharpe-decomposition
+
+# Calculate Sharpe ratio components
+sharpe_components <- endow_data %>%
+  select(-caldt) %>%
+  summarise(across(everything(), list(
+    Excess_Return = ~(mean(., na.rm = TRUE) - rf_rate) * 252,
+    Volatility = ~sd(., na.rm = TRUE) * sqrt(252),
+    Sharpe = ~((mean(., na.rm = TRUE) - rf_rate) * 252) / 
+              (sd(., na.rm = TRUE) * sqrt(252))
+  ))) %>%
+  pivot_longer(everything(), names_to = "Metric", values_to = "Value") %>%
+  separate(Metric, into = c("Asset", "Component"), sep = "_(?=[^_]+$)") %>%
+  pivot_wider(names_from = Component, values_from = Value)
+
+# Display formatted table
+sharpe_components %>%
+  arrange(desc(Sharpe)) %>%
+  mutate(across(where(is.numeric), ~round(., 4))) %>%
+  kable(caption = "Sharpe Ratio Decomposition (Annualized)",
+        booktabs = TRUE)
+```
+
+This decomposition ranks assets by their Sharpe ratios—a metric measuring excess return per unit of volatility risk. Assets at the top achieve high Sharpe ratios through substantial excess returns relative to Treasury bills (numerator effect) or by maintaining low volatility (denominator effect).
+
+Hedge funds frequently lead Sharpe ratio rankings not by delivering the highest absolute returns, but by offering attractive returns with markedly lower volatility than traditional equities. High Sharpe ratio assets in the alternative space achieve this status through their excess return dominance.
+
+The decomposition into excess return and volatility components reveals the drivers of relative performance. Assets with similar Sharpe ratios can achieve this through vastly different mechanisms: a conservative asset might earn a 0.40 Sharpe ratio through 4% excess return and 10% volatility, while an aggressive asset achieves the same 0.40 through 12% excess return and 30% volatility.
+
+## Optimal Portfolio Characteristics
+
+```{r}
+#| label: optimal-portfolios
+
+# Create summary table
+portfolio_summary <- data.frame(
+  Portfolio = c("Minimum Variance", "Tangency", "Equal Weight"),
+  Expected_Return = c(
+    getTargetReturn(mvp)["mean"] * 252,
+    getTargetReturn(tangency)["mean"] * 252,
+    mean(returns_matrix %*% eq_weights) * 252
+  ),
+  Volatility = c(
+    getTargetRisk(mvp)["Cov"] * sqrt(252),
+    getTargetRisk(tangency)["Cov"] * sqrt(252),
+    sd(returns_matrix %*% eq_weights) * sqrt(252)
+  ),
+  Sharpe_Ratio = c(
+    getTargetReturn(mvp)["mean"] / getTargetRisk(mvp)["Cov"] * sqrt(252),
+    getTargetReturn(tangency)["mean"] / getTargetRisk(tangency)["Cov"] * sqrt(252),
+    mean(returns_matrix %*% eq_weights) / sd(returns_matrix %*% eq_weights) * sqrt(252)
+  )
+)
+
+# Display
+portfolio_summary %>%
+  mutate(across(where(is.numeric), ~round(., 4))) %>%
+  kable(caption = "Key Portfolio Characteristics",
+        booktabs = TRUE)
+```
+
+The minimum variance portfolio (MVP) achieves the lowest possible portfolio volatility given the available asset universe and long-only constraints. With annualized volatility typically in the 8-12% range, this portfolio demonstrates the power of diversification and correlation exploitation.
+
+The tangency portfolio maximizes the Sharpe ratio, representing the optimal risk-adjusted allocation. Its volatility, typically 12-18% annualized, exceeds the MVP's but remains below aggressive pure equity strategies. Its expected return of 9-13% annualized substantially dominates the MVP.
+
+The equal-weighted portfolio provides a naive diversification benchmark, allocating equally across all assets without optimization. Its performance characteristics typically fall between the MVP and tangency portfolios.
+
+## Portfolio Risk Metrics
+
+```{r}
+#| label: portfolio-risk-metrics
+
+# Calculate portfolio returns
+portfolio_returns <- data.frame(
+  Equal_Weight = returns_matrix %*% eq_weights,
+  Min_Variance = returns_matrix %*% mvp_weights_vec,
+  Tangency = returns_matrix %*% tangency_weights_vec
+)
+
+# Calculate risk metrics
+risk_metrics_portfolio <- data.frame()
+
+for (col in names(portfolio_returns)) {
+  returns <- portfolio_returns[[col]]
+  
+  risk_metrics_portfolio <- rbind(risk_metrics_portfolio, data.frame(
+    Portfolio = col,
+    Mean_Return = mean(returns) * 252 * 100,
+    Volatility = sd(returns) * sqrt(252) * 100,
+    Sharpe = mean(returns) / sd(returns) * sqrt(252),
+    VaR_95 = quantile(returns, 0.05) * sqrt(252) * 100,
+    CVaR_95 = mean(returns[returns <= quantile(returns, 0.05)]) * sqrt(252) * 100
+  ))
+}
+
+# Display results
+risk_metrics_portfolio %>%
+  mutate(across(where(is.numeric), ~round(., 3))) %>%
+  kable(caption = "Portfolio Risk Metrics (Annualized %)",
+        booktabs = TRUE)
+```
+
+This table synthesizes the portfolio-level implications of individual asset characteristics and correlation structures. The tangency portfolio achieves the highest annualized return, as expected given its construction to maximize the Sharpe ratio. The minimum variance portfolio exhibits the lowest mean return, reflecting its emphasis on risk reduction.
+
+The minimum variance portfolio fulfills its objective, achieving annualized volatility substantially lower than the equal-weighted portfolio. The tangency portfolio accepts higher volatility than the minimum variance portfolio in pursuit of enhanced returns.
+
+The CVaR consistently exceeds VaR across all portfolios, quantifying the expected severity of losses conditional on breaching the 5th percentile threshold. The CVaR-VaR spread provides insight into tail shape: wider spreads indicate distributions where extreme losses, once they occur, tend to be severe.
+
+## Portfolio Weight Decomposition
+
+```{r}
+#| label: portfolio-weights
+
+# Extract weights
+weight_comparison <- data.frame(
+  Asset = colnames(returns_matrix),
+  Equal_Weight = eq_weights,
+  Min_Variance = mvp_weights_vec,
+  Tangency = tangency_weights_vec
+)
+
+weight_comparison %>%
+  mutate(across(where(is.numeric), ~round(., 4))) %>%
+  kable(caption = "Portfolio Weight Comparison",
+        booktabs = TRUE)
+```
+
+The composition differences between portfolios are dramatic. The MVP concentrates heavily in hedge funds (30-50%), Treasury bills (10-30%), and real estate (10-20%), with minimal exposure to volatile alternatives like venture capital. The tangency portfolio shifts substantially toward higher-return assets: venture capital (10-20%), private equity (15-25%), and public equities (20-30%), with reduced defensive allocations.
+
+The equal-weighted portfolio provides 1/N allocation across all assets, serving as a naive diversification benchmark that prior research suggests can be surprisingly competitive with optimized strategies when parameter estimation error is high.
+
+## Asset Contribution to Portfolio Risk
+
+```{r}
+#| label: risk-contribution
+
+# Calculate marginal contribution to risk for tangency portfolio
+portfolio_var <- as.numeric(t(tangency_weights_vec) %*% 
+                           cov(returns_matrix) %*% 
+                           tangency_weights_vec)
+portfolio_vol <- sqrt(portfolio_var)
+
+marginal_contrib <- (cov(returns_matrix) %*% tangency_weights_vec) / portfolio_vol
+component_contrib <- tangency_weights_vec * marginal_contrib
+percent_contrib <- component_contrib / portfolio_vol * 100
+
+risk_contrib_df <- data.frame(
+  Asset = colnames(returns_matrix),
+  Weight = tangency_weights_vec,
+  Marginal_Risk = marginal_contrib,
+  Component_Risk = component_contrib,
+  Percent_Contribution = percent_contrib
+)
+
+risk_contrib_df %>%
+  arrange(desc(Percent_Contribution)) %>%
+  mutate(across(where(is.numeric), ~round(., 4))) %>%
+  kable(caption = "Risk Contribution Analysis - Tangency Portfolio",
+        booktabs = TRUE)
+```
+
+Risk contribution analysis decomposes total portfolio risk into contributions from each asset, accounting for both the asset's standalone volatility and its correlation with other portfolio holdings. Assets with high percent contributions drive portfolio volatility, even if their portfolio weights are modest.
+
+The marginal risk measure indicates how much portfolio volatility would increase with a small increase in the asset's weight. Assets with high marginal risk are strong candidates for weight reduction if the objective is volatility minimization.
+
+This analysis identifies which assets are "pulling their weight" in the portfolio—contributing meaningfully to returns without disproportionately increasing risk—versus assets that may be risk concentrations warranting reexamination.

@@ -1,0 +1,9 @@
+# Abstract {.unnumbered}
+
+This study develops a comprehensive framework for endowment portfolio analysis combining vine copula methodology with traditional mean-variance optimization. We make three contributions: (1) implementing the first regular vine copula analysis of endowment-style portfolios with substantial alternative asset allocations, (2) providing extensive model validation through goodness-of-fit tests, tail dependence analysis, and correlation preservation metrics, and (3) integrating vine copula simulations with multiple optimization frameworks addressing endowment-specific constraints. Our analysis of eight asset classes over 2003-2020 reveals that vine copulas better capture tail dependencies than traditional correlation approaches, with crisis-period correlations 50-100% higher than unconditional estimates. Stress scenario analysis confirms no portfolio dominates across all market conditions: minimum variance portfolios provide superior downside protection (15-25% losses versus 25-40% for aggressive strategies) while sacrificing upside during booms. Practical implications address optimal alternative asset allocations, correlation breakdown during crises, and implementation frictions from fees, illiquidity, and governance constraints.
+
+**Keywords:** Endowment portfolios, vine copulas, portfolio optimization, tail dependence, alternative assets, risk management
+
+**JEL Classifications:** G11, G23, C58
+
+{{< pagebreak >}}

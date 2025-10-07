@@ -1,0 +1,269 @@
+---
+title: "Portfolio Optimization"
+---
+
+```{r}
+#| label: setup-ch4
+#| include: false
+source("_common.R")
+```
+
+Before proceeding to our advanced vine copula framework in Chapter 5, we establish a rigorous mean-variance optimization baseline that serves three critical purposes in our research design.
+
+**Establishing an industry-standard benchmark.** Mean-variance optimization remains the dominant framework employed by institutional investors, including university endowments, despite its well-documented limitations [@markowitz1952portfolio]. By constructing traditional efficient frontiers, we generate portfolio allocations that reflect current industry practice and provide a reference point for evaluating the incremental value of more sophisticated copula-based approaches. Recent evidence from @dimmock2024endowment confirms that endowment asset allocations continue to broadly align with mean-variance efficient portfolios, suggesting this framework remains relevant for practical decision-making.
+
+**Documenting the limitations that motivate vine copulas.** Traditional mean-variance optimization rests on restrictive assumptions that systematically underestimate tail risk in portfolios containing alternative assets. Specifically, the framework assumes: (1) returns follow multivariate normal distributions, despite the severe negative skewness and excess kurtosis we documented in Chapter 5; (2) correlations remain constant across market states, contradicting empirical evidence of correlation breakdown during crises [@longin2001extreme]; and (3) portfolio risk is adequately characterized by variance alone, ignoring higher-order moments and tail dependencies that drive endowment losses during stress periods [@ang2002asymmetric].
+
+Our stress scenario analysis in Section 6.2 deliberately exposes these limitations. By forcing the mean-variance framework to confront extreme market conditions—scenarios where its normality assumptions manifestly fail—we demonstrate concretely why more flexible dependence modeling is essential for alternative-heavy portfolios. The extreme losses that emerge in some stress scenarios reflect not actual portfolio behavior but rather the mathematical artifacts that arise when applying Gaussian assumptions to fat-tailed, asymmetrically dependent returns.
+
+**Establishing the comparative advantage of vine copulas.** Only by conducting both traditional and copula-based analyses on identical data can we credibly quantify the improvement from flexible dependence modeling. The mean-variance efficient frontiers in Sections 6.1.1-6.1.3 establish the risk-return tradeoffs implied by correlation-based optimization. When we subsequently apply vine copulas in Chapter 7, differences in optimal allocations, tail risk estimates, and stress scenario performance directly measure the value-added from accurately modeling non-normal, asymmetric dependencies.
+
+This comparative approach follows the methodological precedent established by @sahamkhadam2023portfolio, who demonstrate that vine copula portfolios materially outperform mean-variance strategies during crisis periods precisely because they correctly model tail dependencies that correlation matrices underestimate. Our research extends this comparative framework to endowment-specific asset classes, where the departures from normality and correlation stability are even more pronounced than in the public equity contexts typically studied.
+
+## Mean-Variance Portfolio Optimization
+
+### Long-Only Efficient Frontier
+
+```{r}
+#| label: efficient-frontier-long
+#| fig-cap: "Mean-Variance Efficient Frontier (Long-Only) with Individual Assets"
+#| fig-height: 5
+#| fig-width: 7
+
+# Calculate individual asset statistics
+asset_stats <- data.frame(
+  Asset = colnames(risky_assets),
+  Mean = apply(risky_assets, 2, mean) * 252,
+  SD = apply(risky_assets, 2, sd) * sqrt(252)
+)
+
+# Define distinct colors for each asset
+asset_colors <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", 
+                  "#FF7F00", "#FFFF33", "#A65628", "#F781BF")
+
+# Extract frontier and ANNUALIZE - SWAP columns
+frontier_data <- frontierPoints(frontier_long)
+frontier_risks <- frontier_data[, 1] * sqrt(252)  # Column 1 is risk
+frontier_returns <- frontier_data[, 2] * 252  # Column 2 is return
+
+# Create plot with proper scaling
+plot(frontier_risks, frontier_returns,
+     type = "l", lwd = 2, col = "black",
+     xlab = "Target Risk [Standard Deviation]",
+     ylab = "Target Return [Mean]",
+     main = "Efficient Frontier",
+     xlim = range(c(frontier_risks, asset_stats$SD)),
+     ylim = range(c(frontier_returns, asset_stats$Mean)))
+grid()
+
+# Overlay assets
+points(asset_stats$SD, asset_stats$Mean, 
+       pch = 16, cex = 2, 
+       col = asset_colors[1:nrow(asset_stats)])
+
+text(asset_stats$SD, asset_stats$Mean, 
+     labels = asset_stats$Asset, 
+     pos = 4, cex = 0.65, offset = 0.4)
+
+# Add MVP and tangency
+tryCatch({
+  mvp_risk <- getTargetRisk(mvp)["Cov"] * sqrt(252)
+  mvp_return <- getTargetReturn(mvp)["mean"] * 252
+  tang_risk <- getTargetRisk(tangency)["Cov"] * sqrt(252)
+  tang_return <- getTargetReturn(tangency)["mean"] * 252
+  
+  points(mvp_risk, mvp_return, pch = 17, cex = 2, col = "black")
+  text(mvp_risk, mvp_return, "MVP", pos = 2, cex = 0.8, font = 2)
+  
+  points(tang_risk, tang_return, pch = 17, cex = 2, col = "black")
+  text(tang_risk, tang_return, "Tangency", pos = 2, cex = 0.8, font = 2)
+}, error = function(e) {})
+
+legend("bottomright", 
+       legend = asset_stats$Asset,
+       col = asset_colors[1:nrow(asset_stats)],
+       pch = 16,
+       pt.cex = 1.5,
+       cex = 0.6,
+       bg = "white")
+```
+
+The efficient frontier illustrates the risk-return tradeoff for long-only portfolios under the mean-variance framework. Individual assets are plotted as colored points, showing their position relative to the efficient frontier. Assets below the frontier represent suboptimal risk-return combinations that can be improved through diversification—a fundamental insight of modern portfolio theory [@markowitz1952portfolio]. The minimum variance portfolio (MVP) achieves the lowest risk level, concentrating in lower-volatility assets while exploiting imperfect correlations. The tangency portfolio maximizes the Sharpe ratio, representing the optimal risk-adjusted allocation for investors who can combine risky assets with risk-free Treasury bills.
+
+The curvature of the frontier demonstrates diminishing returns to risk-taking: moving rightward along the frontier toward higher expected returns requires accepting progressively larger volatility increases. This concave shape reflects the mathematical structure of quadratic optimization and the constraints imposed by asset return covariances. Portfolios on the upper portion of the frontier (above the MVP) are considered "efficient" because they offer the maximum expected return for their level of risk.
+
+### Portfolio Weights Along Frontier
+
+```{r}
+#| label: weight-evolution
+#| fig-cap: "Portfolio Weight Evolution Along Efficient Frontier"
+#| fig-height: 4.5
+#| fig-width: 7
+
+# Extract weights for multiple portfolios
+n_portfolios <- 20
+weights_matrix <- matrix(NA, nrow = n_portfolios, ncol = ncol(risky_assets))
+colnames(weights_matrix) <- colnames(risky_assets)
+
+for (i in 1:n_portfolios) {
+  port_num <- round(i * length(getWeights(frontier_long)[,1]) / n_portfolios)
+  port_num <- min(port_num, length(getWeights(frontier_long)[,1]))
+  weights_matrix[i, ] <- getWeights(frontier_long)[port_num, ]
+}
+
+# Convert to long format
+weights_df <- as.data.frame(weights_matrix) %>%
+  mutate(Portfolio = 1:n_portfolios) %>%
+  pivot_longer(-Portfolio, names_to = "Asset", values_to = "Weight")
+
+# Create stacked area chart
+ggplot(weights_df, aes(x = Portfolio, y = Weight, fill = Asset)) +
+  geom_area(alpha = 0.8) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Portfolio Composition Along Efficient Frontier",
+    x = "Portfolio Number (Risk Increasing)",
+    y = "Portfolio Weight"
+  )
+```
+
+The transition reveals several notable patterns in how mean-variance optimization adjusts allocations as we move from minimum variance toward maximum return strategies. At the minimum variance end (portfolios 1-5), the optimization concentrates heavily in lower-volatility assets, particularly hedge funds and Treasury bills, with minimal exposure to high-volatility alternatives like venture capital. This allocation reflects the optimizer's single-minded focus on variance minimization, leading it to favor assets with low standalone volatility and low correlations with other portfolio components.
+
+As we progress rightward along the frontier toward higher expected returns (portfolios 10-20), the allocation shifts dramatically. Higher-risk, higher-return assets including venture capital, private equity, and the S&P 500 receive progressively larger weights, while defensive positions in Treasury bills decline toward zero. This reallocation illustrates the fundamental risk-return tradeoff: achieving higher expected returns under the mean-variance framework requires accepting assets whose volatility and correlations increase portfolio variance.
+
+The relatively smooth transitions in portfolio weights—without dramatic jumps between adjacent frontier portfolios—reflect the continuous nature of the optimization problem. However, these gradual adjustments can be misleading. Small changes in estimated expected returns or covariances can trigger large allocation shifts, a well-known instability in mean-variance optimization that has motivated robust and Bayesian approaches [@kan2007optimal; @goldfarb2003robust].
+
+### Short-Sale Allowed Frontier
+
+While university endowments typically operate under long-only constraints due to governance policies, liquidity concerns, and regulatory considerations, examining the unconstrained efficient frontier provides valuable insights for several reasons.
+
+**Quantifying the cost of constraints.** By comparing long-only and short-allowed efficient frontiers, we measure the economic cost that short-sale restrictions impose. This cost manifests as a compression of the efficient frontier—for any given level of risk, short-sale constraints force investors to accept lower returns than would be achievable if shorting were permitted. Alternatively, for any target return level, short-sale constraints require accepting higher volatility. The magnitude of this efficiency loss informs whether endowments should consider partial relaxation of short-sale restrictions through derivatives overlays or other structured approaches.
+
+**Understanding implicit portfolio tilts.** When optimization "wants" to short an asset but faces binding long-only constraints, the optimal constrained portfolio reflects a second-best solution that systematically underweights (often to zero) the asset that would ideally be shorted. By examining which assets receive zero weight in long-only optimization but negative weights in unconstrained optimization, we identify assets whose risk-return characteristics make them unattractive diversifiers even when eliminating them entirely is the only available option.
+
+**Informing derivatives and overlay strategies.** Although direct short-selling of illiquid alternatives is impractical, endowments can achieve economically similar exposures through liquid derivatives markets. For example, if unconstrained optimization suggests shorting real estate, an endowment might underweight physical real estate holdings while selling REIT index futures. The short-allowed frontier reveals which such overlay strategies might enhance risk-adjusted returns, though practical implementation requires careful attention to margin requirements, basis risk, and counterparty exposure.
+
+```{r}
+#| label: efficient-frontier-comparison
+#| fig-cap: "Short-Allowed Efficient Frontier with Individual Assets"
+#| fig-height: 5
+#| fig-width: 7
+
+# Calculate individual asset statistics
+asset_stats <- data.frame(
+  Asset = colnames(risky_assets),
+  Mean = apply(risky_assets, 2, mean) * 252,
+  SD = apply(risky_assets, 2, sd) * sqrt(252)
+)
+
+# Define distinct colors for each asset
+asset_colors <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", 
+                  "#FF7F00", "#FFFF33", "#A65628", "#F781BF")
+
+# Extract frontier and ANNUALIZE - SWAP columns
+frontier_data <- frontierPoints(frontier_short)
+frontier_risks <- frontier_data[, 1] * sqrt(252)  # Column 1 is risk
+frontier_returns <- frontier_data[, 2] * 252  # Column 2 is return
+
+# Create plot with proper scaling
+plot(frontier_risks, frontier_returns,
+     type = "l", lwd = 2, col = "black",
+     xlab = "Mean-Var Target Risk",
+     ylab = "Target Return",
+     main = "Efficient Frontier",
+     xlim = range(c(frontier_risks, asset_stats$SD)),
+     ylim = range(c(frontier_returns, asset_stats$Mean)))
+grid()
+
+# Overlay assets
+points(asset_stats$SD, asset_stats$Mean, 
+       pch = 16, cex = 2, 
+       col = asset_colors[1:nrow(asset_stats)])
+
+text(asset_stats$SD, asset_stats$Mean, 
+     labels = asset_stats$Asset, 
+     pos = 4, cex = 0.65, offset = 0.4)
+
+legend("bottomright", 
+       legend = asset_stats$Asset,
+       col = asset_colors[1:nrow(asset_stats)],
+       pch = 16,
+       pt.cex = 1.5,
+       cex = 0.6,
+       bg = "white")
+```
+
+The short-allowed frontier extends beyond the long-only constraint, achieving lower minimum variance through strategic short positions and accessing higher return-risk combinations. Individual assets are positioned as colored points, demonstrating how the relaxation of short-sale constraints expands the opportunity set. The frontier extends further left (lower risk) and further right/upward (higher return), illustrating the economic value of short-selling capabilities in principle, though practical implementation requires careful consideration of short-selling costs, margin requirements, and the unlimited loss potential inherent in short positions.
+
+The gap between long-only and short-allowed frontiers quantifies the "cost of constraints"—the reduction in risk-adjusted returns that institutional investors accept by forgoing short-sale strategies. For endowments, this cost must be weighed against the operational complexities, governance concerns, and reputational risks associated with shorting and leverage.
+
+## Stress Scenario Analysis
+
+### The Necessity and Design of Stress Testing for Endowment Portfolios
+
+Our stress scenario analysis serves a dual purpose: evaluating portfolio resilience across market environments and deliberately exposing the limitations of mean-variance optimization that motivate our subsequent vine copula framework in Chapter 7.
+
+**Why stress scenarios matter for endowments.** University endowments face a unique risk profile characterized by: (1) perpetual investment horizons requiring preservation of purchasing power across generations; (2) binding spending obligations typically requiring 4-5% annual distributions regardless of market conditions [@cejnek2023spending]; (3) illiquid alternative asset allocations (often 50-70% of total assets) limiting rebalancing flexibility during crises [@brown2014endowments]; and (4) capital call obligations creating forced deployment of capital at potentially unfavorable times.
+
+These features imply that portfolio performance during severe market stress disproportionately affects endowment sustainability relative to short-horizon investors who can wait out downturns. An endowment forced to liquidate illiquid positions at distressed prices to meet spending needs and capital calls suffers permanent impairment that subsequent recoveries cannot fully repair [@chambers2020endowment]. Stress testing therefore provides essential insight into downside risks that annualized volatility and Sharpe ratios obscure.
+
+**Scenario construction methodology.** We generate seven distinct stress scenarios corresponding to percentiles of the historical return distribution: 1st, 5th, 10th, 50th (median), 90th, 95th, and 99th. These percentiles span from extreme crisis conditions through normal markets to boom periods, enabling evaluation of portfolio performance across the full range of historically observed outcomes.
+
+Specifically, for each asset class, we identify the return at each percentile of its empirical distribution over our 2003-2020 sample period. We then construct "scenario returns" by assuming all assets simultaneously experience their returns at that percentile. This approach generates internally consistent stress scenarios where all assets jointly experience crisis conditions (at the 1st percentile) or jointly experience boom conditions (at the 99th percentile). For each scenario, we calculate portfolio returns as the weighted sum of asset returns using the optimization-derived portfolio weights.
+
+**Critical implementation note: Mathematical artifacts in extreme scenarios.** Some of our stress scenarios—particularly the 1st percentile (most extreme crisis)—generate annualized portfolio losses substantially exceeding -100%, which is mathematically impossible for long-only portfolios where losses are bounded at -100% of initial value. These artifacts arise from three sources inherent to the mean-variance framework:
+
+First, **extrapolation beyond sample support**: The framework estimates expected returns and covariances from historical data, then projects these parameters to scenarios more extreme than observed historically. When we force the model to evaluate returns at the 1st percentile—an event occurring only 0.01 of the time—we are effectively extrapolating far into the distribution tails where parameter estimates become highly unreliable and the Gaussian approximation breaks down completely.
+
+Second, **normality assumption breakdown**: Mean-variance optimization implicitly assumes returns follow multivariate normal distributions [@embrechts2002correlation]. Under normality, extreme negative and positive outcomes should occur with symmetric probabilities. However, financial returns—particularly for alternative assets with embedded leverage and illiquidity risk—empirically exhibit severe negative skewness and excess kurtosis. Extreme negative outcomes occur more frequently and with greater magnitude than normal distributions predict. When we force normally-distributed projections to match non-normal empirical percentiles, the model produces predictions that exceed mathematical and economic bounds.
+
+Third, **static analysis ignoring dynamic constraints**: Our stress scenarios assume portfolios maintain fixed weights as returns evolve. In reality, a portfolio experiencing severe losses would asymptotically approach zero value, never breaching -100% loss from its starting value. The >-100% projections reflect the flawed assumption that investors could theoretically rebalance to maintain target weights even as losses compound—a physically impossible scenario that reveals model inadequacy.
+
+**Why present these flawed scenarios?** We deliberately retain these mathematically problematic stress results for two pedagogically valuable reasons. First, they viscerally demonstrate the inadequacy of mean-variance optimization for alternative-heavy portfolios characterized by non-normal, asymmetrically dependent returns. The absurdity of the projected losses signals model breakdown far more effectively than abstract statistical tests, motivating our subsequent vine copula analysis. Second, by comparing these mean-variance stress results with vine copula-based stress results in Chapter 7, we quantify precisely how much error correlation-based frameworks introduce when applied to endowment asset classes—error that portfolio managers must understand to avoid systematic underestimation of tail risk [@embrechts2002correlation].
+
+```{r}
+#| label: stress-scenarios
+
+# Generate stress scenarios at different quantiles
+stress_levels <- c(0.01, 0.05, 0.10, 0.50, 0.90, 0.95, 0.99)
+stress_names <- c("Crisis", "Severe", "Moderate", "Median", 
+                  "Strong", "Very Strong", "Exceptional")
+
+# Calculate stressed returns
+stress_results <- data.frame()
+
+for (i in seq_along(stress_levels)) {
+  stressed_returns <- apply(returns_matrix, 2, 
+                           function(x) quantile(x, stress_levels[i]))
+  
+  stress_results <- rbind(stress_results, data.frame(
+    Scenario = stress_names[i],
+    Equal_Weight = sum(stressed_returns * eq_weights) * 252 * 100,
+    Min_Variance = sum(stressed_returns * mvp_weights_vec) * 252 * 100,
+    Tangency = sum(stressed_returns * tangency_weights_vec) * 252 * 100
+  ))
+}
+
+# Display stress test results
+stress_results %>%
+  mutate(across(where(is.numeric), ~round(., 2))) %>%
+  kable(caption = "Annualized Returns Under Stress Scenarios (%)",
+        booktabs = TRUE)
+```
+
+### Interpreting Stress Scenario Results
+
+Several critical patterns emerge from the stress testing, though specific magnitudes must be interpreted with appropriate caution given the mean-variance framework limitations discussed above.
+
+**No portfolio dominates across all states of the world.** The minimum variance portfolio provides dramatically superior downside protection during crises, but sacrifices substantial upside during boom periods. This tradeoff is fundamental to portfolio construction and cannot be eliminated through any optimization technique—it reflects the intrinsic negative relationship between expected return and risk aversion implicit in asset pricing [@markowitz1952portfolio]. Endowments must explicitly articulate whether their governance priorities emphasize capital preservation during crises (favoring minimum variance strategies) or long-run growth maximization (favoring higher expected return strategies accepting greater interim volatility).
+
+**The tangency portfolio delivers optimal risk-adjusted returns on average across scenarios but requires tolerating significant interim volatility.** This portfolio's construction to maximize the Sharpe ratio implies it balances risk and return most efficiently when performance is evaluated over full market cycles spanning both crises and booms [@keating2002universal]. However, its substantial losses during crisis scenarios may prove unacceptable for endowments with binding liquidity constraints, capital call obligations, or spending pressures that force realization of paper losses at inopportune times [@brown2014endowments].
+
+**Equal-weighting provides reasonable diversification but fails to exploit correlation structure optimally.** The equal-weighted benchmark falls consistently between minimum variance and tangency portfolios across scenarios, confirming that naive 1/N diversification captures some but not all available risk reduction benefits [@demiguel2009optimal]. This finding aligns with the broader literature demonstrating that simple heuristics perform surprisingly well when estimation error in optimization inputs is high, but remain inferior to well-specified optimization when parameters are reliably estimated.
+
+**The extreme magnitude of some scenarios underscores the motivation for vine copulas.** The economically impossible losses that emerge in the most extreme scenarios directly result from applying correlation-based dependence modeling to assets whose tail dependencies correlation matrices systematically underestimate [@embrechts2002correlation]. Mean-variance optimization assumes multivariate normality, implying that asset returns maintain relatively stable correlation structures across all market states. Empirical evidence decisively rejects this assumption: @longin2001extreme document that international equity correlations increase from 0.40-0.50 in normal periods to 0.70-0.80 during extreme downturns, precisely when diversification is most valuable.
+
+Our vine copula analysis in Chapter 7 addresses this limitation by flexibly modeling joint tail behavior through copula families specifically designed to capture asymmetric crisis dependencies. By separating marginal distributions from dependence structures and allowing different dependence patterns in different parts of the joint distribution, vine copulas provide a more realistic representation of how alternative asset returns co-move during stress periods [@aas2009pair; @bedford2002vines].
+
+This stress analysis accomplishes its dual objectives: demonstrating portfolio performance heterogeneity across market states and highlighting the fundamental limitations of correlation-based optimization. The extreme results serve as a bridge to Chapter 7, where sophisticated dependence modeling will provide more reliable tail risk estimates and stress scenario projections that respect economic and mathematical bounds while accurately reflecting the asymmetric, non-normal nature of alternative asset returns.

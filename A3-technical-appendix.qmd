@@ -1,0 +1,247 @@
+---
+title: "Appendix C: Technical Details"
+---
+
+```{r}
+#| label: setup-appc
+#| include: false
+source("_common.R")
+```
+
+## ESGtoolkit Implementation Notes
+
+The ESGtoolkit package provides several advantages for endowment portfolio modeling:
+
+- **Flexible shock generation**: The `simshocks()` function supports various copula families including Gaussian, Student-t, and Archimedean classes, enabling practitioners to match the dependence structure to empirical patterns rather than imposing restrictive multivariate normality.
+
+- **Efficient simulation**: Antithetic variates reduce Monte Carlo error by generating complementary random draws that share negative correlation, effectively doubling sample information content without additional computation. This variance reduction technique is particularly valuable for estimating tail metrics where sampling variation is inherently high.
+
+- **Integrated framework**: Seamless combination of copula-based shocks with diffusion processes (GBM, CIR, Vasicek) enables holistic scenario generation where interest rates, equity returns, and other variables evolve jointly with realistic dependencies.
+
+- **Professional validation**: Built-in martingale tests and convergence diagnostics provide quality assurance for simulated scenarios, ensuring they satisfy no-arbitrage conditions and achieve adequate precision for downstream applications.
+
+## Vine Copula Methodology
+
+Vine copulas decompose high-dimensional dependence structures into bivariate copulas organized in a tree structure, allowing for:
+
+### Asymmetric Dependencies
+
+Different asset pairs can exhibit different types of dependence (symmetric, asymmetric, tail-heavy, tail-independent) rather than imposing a single correlation structure across all pairs as multivariate normal or t-distributions require.
+
+### Flexible Tail Behaviors
+
+Clayton copulas capture lower tail dependence (co-crash risk), Gumbel copulas capture upper tail dependence (co-boom risk), and Student-t copulas capture symmetric tail dependence. This flexibility better reflects empirical observations where some assets crash together but rally independently, or vice versa.
+
+### More Accurate Extreme Event Modeling
+
+By explicitly modeling tail dependencies through appropriate copula families, vine copulas generate scenarios where joint extremes occur with frequencies matching actual market behavior rather than the underestimation typical of Gaussian assumptions.
+
+### Better Capture of Contagion Effects
+
+The hierarchical vine structure naturally represents contagion and spillover effects where dependencies strengthen during market stress, propagating through the tree structure to generate realistic crisis scenarios.
+
+## Mathematical Foundations
+
+### Sklar's Theorem
+
+Any multivariate cumulative distribution function $F$ can be decomposed as:
+
+$F(x_1, \ldots, x_d) = C(F_1(x_1), \ldots, F_d(x_d))$
+
+where $C$ is a copula function—a multivariate distribution on $[0,1]^d$ with uniform marginals—and $F_i$ are the marginal distribution functions.
+
+### Vine Copula Density Decomposition
+
+The joint density can be decomposed through conditional distributions:
+
+$f(x_1, \ldots, x_d) = \prod_{i=1}^{d} f_i(x_i) \cdot \prod_{j=1}^{d-1}\prod_{e \in E_j} c_{e|D(e)}$
+
+where $c_{e|D(e)}$ represents pair-copula densities conditional on sets $D(e)$ determined by the vine structure, and $E_j$ denotes edges in tree $j$.
+
+### Tail Dependence Coefficients
+
+Lower tail dependence coefficient for bivariate copula $C$:
+
+$$\lambda_L = \lim_{u \to 0^+} P(U_2 \leq u | U_1 \leq u) = \lim_{u \to 0^+} \frac{C(u, u)}{u}$$
+
+Upper tail dependence coefficient:
+
+$\lambda_U = \lim_{u \to 1^-} P(U_2 > u | U_1 > u) = \lim_{u \to 1^-} \frac{1 - 2u + C(u, u)}{1 - u}$
+
+For independence, $\lambda_L = \lambda_U = 0$. For perfect tail dependence, $\lambda_L = \lambda_U = 1$.
+
+## Copula Family Characteristics
+
+### Gaussian Copula
+
+$$C(u_1, u_2; \rho) = \Phi_\rho(\Phi^{-1}(u_1), \Phi^{-1}(u_2))$$
+
+- Symmetric dependence
+- No tail dependence ($\lambda_L = \lambda_U = 0$)
+- Parameter: $\rho \in (-1, 1)$ (linear correlation)
+
+### Student-t Copula
+
+$$C(u_1, u_2; \rho, \nu) = t_{\rho,\nu}(t_\nu^{-1}(u_1), t_\nu^{-1}(u_2))$$
+
+- Symmetric dependence with tail dependence
+- Both upper and lower tail dependence
+- Parameters: $\rho \in (-1, 1)$, $\nu > 0$ (degrees of freedom)
+
+### Clayton Copula
+
+$$C(u_1, u_2; \theta) = (u_1^{-\theta} + u_2^{-\theta} - 1)^{-1/\theta}$$
+
+- Asymmetric with lower tail dependence
+- $\lambda_L = 2^{-1/\theta}$, $\lambda_U = 0$
+- Parameter: $\theta > 0$
+
+## Gumbel Copula
+
+$$C(u_1, u_2; \theta) = \exp\{-[(-\ln u_1)^\theta + (-\ln u_2)^\theta]^{1/\theta}\}$$
+
+- Asymmetric with upper tail dependence
+- $\lambda_L = 0$, $\lambda_U = 2 - 2^{1/\theta}$
+- Parameter: $\theta \geq 1$
+
+## Frank Copula
+
+$$C(u_1, u_2; \theta) = -\frac{1}{\theta}\ln\left(1 + \frac{(e^{-\theta u_1} - 1)(e^{-\theta u_2} - 1)}{e^{-\theta} - 1}\right)$$
+
+- Symmetric without tail dependence
+- $\lambda_L = \lambda_U = 0$
+- Parameter: $\theta \in \mathbb{R} \setminus \{0\}$
+
+## Joe Copula
+
+$$C(u_1, u_2; \theta) = 1 - [(1-u_1)^\theta + (1-u_2)^\theta - (1-u_1)^\theta(1-u_2)^\theta]^{1/\theta}$$
+
+- Asymmetric with upper tail dependence
+- $\lambda_U = 2 - 2^{1/\theta}$, $\lambda_L = 0$
+- Parameter: $\theta \geq 1$
+
+# Software Implementation Details
+
+## Package Versions
+
+```{r}
+#| label: package-versions
+
+# Display key package versions
+packages <- c("rvinecopulib", "VineCopula", "fPortfolio", 
+              "esgtoolkit", "PerformanceAnalytics")
+
+version_info <- data.frame(
+  Package = packages,
+  Version = sapply(packages, function(pkg) {
+    as.character(packageVersion(pkg))
+  })
+)
+
+version_info %>%
+  kable(caption = "Key Package Versions Used",
+        booktabs = TRUE)
+```
+
+## Computational Environment
+
+```{r}
+#| label: session-info
+
+# Display session information
+cat("R version:", R.version.string, "\n")
+cat("Platform:", R.version$platform, "\n")
+cat("Running under:", Sys.info()["sysname"], Sys.info()["release"], "\n")
+```
+
+# Convergence Analysis
+
+## Monte Carlo Standard Errors
+
+For a quantity $\theta$ estimated from $N$ simulation paths, the Monte Carlo standard error is:
+
+$$SE_{MC} = \frac{\sigma}{\sqrt{N}}$$
+
+where $\sigma$ is the standard deviation of the quantity across simulation paths. Achieving a standard error of 0.001 for a quantity with $\sigma = 0.10$ requires:
+
+$$N = \left(\frac{0.10}{0.001}\right)^2 = 10,000 \text{ paths}$$
+
+## Variance Reduction
+
+Antithetic variates generate complementary paths $(Z, -Z)$ where $Z$ is a standard normal shock. For a function $f$ with monotonic behavior:
+
+$$Var\left[\frac{f(Z) + f(-Z)}{2}\right] \leq Var[f(Z)]$$
+
+Typical variance reduction factors range from 1.5× to 2.5× depending on function curvature.
+
+# Data Quality Checks
+
+## Missing Value Summary
+
+```{r}
+#| label: missing-values
+
+missing_summary <- endow_data %>%
+  summarise(across(everything(), ~sum(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Missing_Count") %>%
+  mutate(Missing_Pct = Missing_Count / nrow(endow_data) * 100)
+
+missing_summary %>%
+  kable(caption = "Missing Value Summary",
+        booktabs = TRUE)
+```
+
+## Outlier Detection
+
+```{r}
+#| label: outlier-detection
+
+# Identify extreme observations (>5 SD from mean)
+outlier_summary <- data.frame()
+
+for (col in names(risky_assets)) {
+  returns <- risky_assets[[col]]
+  mean_ret <- mean(returns, na.rm = TRUE)
+  sd_ret <- sd(returns, na.rm = TRUE)
+  
+  n_outliers <- sum(abs(returns - mean_ret) > 5 * sd_ret, na.rm = TRUE)
+  
+  outlier_summary <- rbind(outlier_summary, data.frame(
+    Asset = col,
+    N_Outliers = n_outliers,
+    Pct_Outliers = n_outliers / length(returns) * 100
+  ))
+}
+
+outlier_summary %>%
+  kable(caption = "Outlier Summary (>5 SD from mean)",
+        booktabs = TRUE)
+```
+
+# Limitations and Future Extensions
+
+## Current Limitations
+
+1. **Static Parameters**: Copula parameters are estimated over the full sample period, ignoring potential time-variation or regime changes.
+
+2. **Truncation**: We use full vine structures without truncation, which may overfit in high dimensions.
+
+3. **Illiquidity**: Alternative asset valuations may be smoothed, understating true volatility and overstating diversification benefits.
+
+4. **Fees**: Optimization abstracts from management fees, performance fees, and transaction costs that materially impact net returns.
+
+## Potential Extensions
+
+1. **Dynamic Copulas**: Implement DCC-GARCH or time-varying vine structures to capture evolving dependencies.
+
+2. **Regime-Switching**: Model distinct normal and crisis regimes with different copula parameters.
+
+3. **Liquidity Constraints**: Add explicit constraints for capital call obligations and spending requirements.
+
+4. **Robust Optimization**: Incorporate parameter uncertainty through Bayesian methods or worst-case optimization.
+
+5. **Factor Models**: Decompose returns into systematic factors and idiosyncratic components.
+
+---
+
+*Technical appendix compiled `r Sys.Date()`*

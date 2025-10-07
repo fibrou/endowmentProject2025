@@ -1,0 +1,105 @@
+project:
+  type: book
+  output-dir: _output
+
+book:
+  title: "Endowment Portfolio Analysis: A Comprehensive Framework"
+  author:
+    - name: "John Paul Broussard"
+    - name: "G. Geoffrey Booth"
+    - name: "Ryan Timmer"
+  date: today
+  
+  chapters:
+    - index.qmd
+    - 01-introduction.qmd
+    - 02-literature-review.qmd
+    - 03-data-analysis.qmd
+    - 04-portfolio-optimization.qmd
+    - 05-vine-copula-analysis.qmd
+    - 06-conclusions.qmd
+    - references.qmd
+    - part: "Appendices"
+      chapters:
+        - A1-vine-copula-details.qmd
+        - A2-performance-attribution.qmd
+        - A3-technical-appendix.qmd
+        - A4-implementation-guidance.qmd
+        - A5-dcc-garch.qmd
+
+bibliography: references.bib
+
+format:
+  pdf:
+    documentclass: book
+    classoption: [11pt, letterpaper, oneside]
+    geometry:
+      - top=1in
+      - bottom=1in
+      - left=1.25in
+      - right=1.25in
+    toc: true
+    toc-depth: 3
+    toc-title: "Table of Contents"
+    number-sections: true
+    number-depth: 3
+    lof: false
+    lot: false
+    colorlinks: true
+    linkcolor: blue
+    citecolor: blue
+    urlcolor: blue
+    filecolor: blue
+    fig-pos: 'htbp'
+    tbl-pos: 'htbp'
+    keep-tex: false
+    cite-method: biblatex
+    biblio-style: apa
+    include-in-header:
+      text: |
+        \usepackage{float}
+        \usepackage{booktabs}
+        \usepackage{longtable}
+        \usepackage{array}
+        \usepackage{multirow}
+        \usepackage{wrapfig}
+        \usepackage{colortbl}
+        \usepackage{pdflscape}
+        \usepackage{tabu}
+        \usepackage{threeparttable}
+        \usepackage{threeparttablex}
+        \usepackage[normalem]{ulem}
+        \usepackage{makecell}
+        \usepackage{xcolor}
+        \usepackage{appendix}
+        \usepackage[font={small}]{caption}
+        \renewcommand{\appendixname}{Appendix}
+        \renewcommand{\appendixtocname}{Appendices}
+        \renewcommand{\appendixpagename}{Appendices}
+
+crossref:
+  chapters: true
+  fig-title: "Figure"
+  tbl-title: "Table"
+  fig-prefix: "Figure"
+  tbl-prefix: "Table"
+  eq-prefix: "Equation"
+
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: true
+  freeze: auto
+
+knitr:
+  opts_chunk:
+    fig.retina: 2
+    fig.width: 7
+    fig.height: 5
+    fig.align: "center"
+    out.width: "100%"
+    cache: true
+    cache.lazy: false
+    dev: "pdf"
+    dpi: 300

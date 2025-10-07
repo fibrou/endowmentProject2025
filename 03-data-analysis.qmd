@@ -1,0 +1,169 @@
+---
+title: "Data and Exploratory Analysis"
+---
+
+```{r}
+#| label: setup-ch3
+#| include: false
+source("_common.R")
+```
+
+## Data Import and Preprocessing
+
+### Dataset Overview
+
+```{r}
+#| label: data-overview
+cat("Dataset loaded:", nrow(endow_data), "observations,", ncol(endow_data), "variables\n")
+cat("Data Coverage:\n")
+cat("- Start Date:", format(min(endow_data$caldt), "%B %d, %Y"), "\n")
+cat("- End Date:", format(max(endow_data$caldt), "%B %d, %Y"), "\n")
+cat("- Observations:", format(nrow(endow_data), big.mark = ","), "\n")
+cat("- Risky Assets:", ncol(risky_assets), "\n")
+```
+
+The data quality assessment confirms complete observations across all asset classes, satisfying the requirements for copula-based modeling which relies on complete dependence structure estimation without imputation bias.
+
+## Exploratory Data Analysis
+
+### Return Distributions
+
+```{r}
+#| label: return-distributions
+#| fig-cap: "Empirical Return Distributions by Asset Class"
+#| fig-height: 4.5
+#| fig-width: 7
+
+returns_long <- endow_data %>%
+  select(-caldt) %>%
+  pivot_longer(everything(), names_to = "Asset", values_to = "Return") %>%
+  mutate(Asset = factor(Asset, levels = names(endow_data)[-1]))
+
+ggplot(returns_long, aes(x = Asset, y = Return, fill = Asset)) +
+  geom_violin(alpha = 0.7) +
+  geom_boxplot(width = 0.2, alpha = 0.9) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Return Distributions Across Asset Classes",
+    subtitle = "Violin plots show probability density; box plots show quartiles and outliers",
+    x = "",
+    y = "Daily Returns"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") +
+  scale_fill_brewer(palette = "Set2")
+```
+
+The return distributions exhibit distinct risk-return profiles across asset classes. Treasury bills show minimal dispersion, confirming their role as the risk-free asset. Equity-like assets display wider distributions with visible fat tails, indicating higher volatility and extreme event risk. The presence of outliers, particularly in alternative assets, highlights the importance of using copula methods that can capture tail dependencies.
+
+### Statistical Properties
+
+```{r}
+#| label: descriptive-stats
+
+stats_summary <- endow_data %>%
+  select(-caldt) %>%
+  summarise(across(everything(), list(
+    Mean = ~mean(., na.rm = TRUE) * 252,
+    StdDev = ~sd(., na.rm = TRUE) * sqrt(252),
+    Skewness = ~skewness(.),
+    Kurtosis = ~kurtosis(.) - 3,
+    VaR95 = ~quantile(., 0.05, na.rm = TRUE),
+    CVaR95 = ~mean(.[. <= quantile(., 0.05, na.rm = TRUE)], na.rm = TRUE),
+    Sharpe = ~(mean(., na.rm = TRUE) * 252) / (sd(., na.rm = TRUE) * sqrt(252))
+  ))) %>%
+  pivot_longer(everything(), names_to = "Metric", values_to = "Value") %>%
+  separate(Metric, into = c("Asset", "Statistic"), sep = "_(?=[^_]+$)") %>%
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+stats_summary %>%
+  kable(digits = 4, 
+        caption = "Annualized Statistics and Risk Metrics",
+        booktabs = TRUE)
+```
+
+The annualized statistics reveal substantial variation across asset categories. Negative skewness coefficients for most equity-like assets indicate asymmetric return distributions with more frequent large negative returns—a characteristic particularly pronounced during crisis periods. Excess kurtosis values substantially above zero confirm the presence of fat tails, justifying our use of copula-based methods.
+
+### Correlation Analysis
+
+```{r}
+#| label: correlation-matrix
+#| fig-cap: "Asset Correlation Matrix"
+#| fig-height: 5
+#| fig-width: 7
+
+PerformanceAnalytics::chart.Correlation(risky_assets, 
+                                        histogram = TRUE, 
+                                        pch = 19)
+```
+
+The correlation structure reveals several patterns. Traditional equity assets exhibit strong positive correlations, suggesting limited diversification benefits between public market investments. Hedge funds demonstrate relatively high correlations with public equities, indicating these alternatives may not provide the diversification benefits commonly attributed to them during our sample period. Real estate returns show the lowest correlations with most other asset classes, suggesting its value as a diversification tool.
+
+## Risk Analysis
+
+### Value at Risk and Expected Shortfall
+
+```{r}
+#| label: risk-metrics
+#| fig-cap: "Historical VaR and CVaR by Asset"
+#| fig-height: 4.5
+#| fig-width: 7
+
+risk_metrics <- endow_data %>%
+  select(-caldt) %>%
+  summarise(across(everything(), list(
+    VaR_95 = ~quantile(., 0.05, na.rm = TRUE) * sqrt(252),
+    CVaR_95 = ~mean(.[. <= quantile(., 0.05, na.rm = TRUE)], na.rm = TRUE) * sqrt(252)
+  ))) %>%
+  pivot_longer(everything(), names_to = "Metric", values_to = "Value") %>%
+  separate(Metric, into = c("Asset", "Risk_Metric"), sep = "_(?=[^_]+_[^_]+$)") %>%
+  mutate(Risk_Metric = str_replace(Risk_Metric, "_", " "))
+
+ggplot(risk_metrics, aes(x = Asset, y = -Value, fill = Risk_Metric)) +
+  geom_col(position = "dodge", alpha = 0.8) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    title = "Tail Risk Metrics (Annualized)",
+    x = "",
+    y = "Risk Measure (Positive Values)",
+    fill = "Metric"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The tail risk measures reveal substantial heterogeneity in downside risk exposure. Venture capital exhibits the highest tail risk by both measures, reflecting exposure to startup failures and illiquidity during market stress. The CVaR consistently exceeds VaR across all risky assets, confirming fat-tailed distributions where extreme losses are both more frequent and severe than normal distributions predict.
+
+### Rolling Volatility Analysis
+
+```{r}
+#| label: rolling-volatility
+#| fig-cap: "60-Day Rolling Volatility"
+#| fig-height: 4.5
+#| fig-width: 7
+
+window_size <- 60
+rolling_vol <- rollapply(endow_xts[, -ncol(endow_xts)], 
+                         width = window_size,
+                         FUN = function(x) sd(x, na.rm = TRUE) * sqrt(252),
+                         by.column = TRUE,
+                         align = "right")
+
+rolling_vol_df <- fortify.zoo(rolling_vol) %>%
+  pivot_longer(-Index, names_to = "Asset", values_to = "Volatility")
+
+ggplot(rolling_vol_df, aes(x = Index, y = Volatility, color = Asset)) +
+  geom_line(linewidth = 0.8) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    title = paste0(window_size, "-Day Rolling Volatility (Annualized)"),
+    subtitle = "Time-varying risk reveals volatility clustering and regime changes",
+    x = "",
+    y = "Volatility",
+    color = "Asset"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+The rolling volatility analysis reveals distinct volatility regimes and clustering patterns. The 2008-2009 financial crisis period shows synchronized volatility spikes across all asset classes. The correlation of volatility spikes across assets during stress periods underscores the importance of modeling tail dependencies through vine copulas.
